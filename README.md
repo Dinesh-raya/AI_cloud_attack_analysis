@@ -10,6 +10,33 @@ Calculated Risk = `Exposure` × `Privilege` × `AI Data Sensitivity`
 This tool allows security engineers to **model attack paths deterministically** from Terraform code, answering the question:
 > "Can an attacker starting from the Internet reach my sensitive AI prompt logs?"
 
+---
+
+## 🏰 The Castle Analogy (Explained for the Rest of Us)
+
+If you're wondering how this differs from other tools, imagine your Cloud Infrastructure is a giant **Lego Castle**.
+
+#### 1. Standard Tools (The Building Inspector)
+Tools like **Prowler** or **ScoutSuite** act like a Building Inspector with a clipboard. They check one thing at a time:
+*   "Is the front gate locked?" -> **YES** ✅
+*   "Does the guard have a badge?" -> **YES** ✅
+
+The Inspector says: **"Great job! Your castle is safe."**
+
+#### 2. The Problem
+The Inspector misses the *story*. He didn't notice that the cat window is open, and the cat knows a secret tunnel to the treasury.
+
+#### 3. Cloud Attack Analysis (The Heist Planner)
+This tool acts like a **Master Thief**. It doesn't look at a checklist; it draws a **Map of Connections**:
+1.  "I can crawl through the Cat Window..." (Public Web Server)
+2.  "...to get to the Kitchen..." (Server climbs into the internal network)
+3.  "...steal the Cook's Key..." (Steal IAM Role Credentials)
+4.  "...and walk right into the Treasury!" (Access the S3 Bucket with Critical Data).
+
+**In short:** Other tools check if you followed the rules; this tool checks if a bad guy can actually win.
+
+---
+
 ## Features
 - **Offline & Private**: No cloud credentials required. Runs entirely on your local machine.
 - **AI-Aware**: Specifically models Bedrock and SageMaker as high-value targets.
@@ -56,7 +83,7 @@ python setup.py install
 **Scanning a Terraform Directory**
 
 ```bash
-python -m cloud_attack_analysis.cli scan ./examples/vulnerable_infra
+python -m cloud_attack_analysis.cli scan ./examples/vulnerable_infra --visualize
 ```
 
 **Example Output**
@@ -112,14 +139,11 @@ This tool treats these logs as "Critical Data" nodes in the graph, ensuring they
 *   **"Magic" Remediation**: We suggest fixes, but we will never auto-apply changes to your code. Humans must remain in the loop.
 
 ## Roadmap
-*   **v1.0 (Current)**: 
+*   **v1.0 (Released)**: 
     *   Core Graph Engine (NetworkX).
-    *   Basic AWS Resource Support (EC2, S3, IAM, Bedrock, SageMaker).
-    *   Pathfinding Algorithm targeting "logs_to" relationships.
+    *   Visualization (`--visualize`).
+    *   CI/CD Integration.
+    *   Terraform Plan JSON Support.
 *   **v2.0 (Planned)**: 
     *   Expanded IAM parsing (Condition keys, `NotAction`).
     *   Support for vector databases (Pinecone, Weaviate) if declared in Terraform.
-    *   CI/CD Integration (GitHub Actions output).
-*   **v3.0 (Long Term)**: 
-    *   Live State Ingestion (boto3) to augment static analysis.
-    *   Visual Graph Export (GraphViz/Mermaid).
