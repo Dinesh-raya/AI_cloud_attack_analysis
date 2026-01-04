@@ -1,0 +1,109 @@
+{
+  "format_version": "1.0",
+  "terraform_version": "1.5.0",
+  "planned_values": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_instance.ray_head_node",
+          "mode": "managed",
+          "type": "aws_instance",
+          "name": "ray_head_node",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 1,
+          "values": {
+            "ami": "ami-0c55b159cbfafe1f0",
+            "instance_type": "g4dn.xlarge",
+            "vpc_security_group_ids": [
+              "sg-12345678"
+            ],
+            "iam_instance_profile": "ray_worker_profile",
+            "tags": {
+              "Name": "Ray Head Node"
+            }
+          }
+        },
+        {
+          "address": "aws_security_group.ray_sg",
+          "mode": "managed",
+          "type": "aws_security_group",
+          "name": "ray_sg",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 1,
+          "values": {
+            "id": "sg-12345678",
+            "ingress": [
+              {
+                "cidr_blocks": [
+                  "0.0.0.0/0"
+                ],
+                "description": "Ray Dashboard",
+                "from_port": 8265,
+                "protocol": "tcp",
+                "to_port": 8265
+              }
+            ]
+          }
+        },
+        {
+          "address": "aws_iam_role.ray_worker_role",
+          "mode": "managed",
+          "type": "aws_iam_role",
+          "name": "ray_worker_role",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 0,
+          "values": {
+            "name": "ray-worker-role",
+            "assume_role_policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"ec2.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}"
+          }
+        },
+        {
+            "address": "aws_iam_instance_profile.ray_worker_profile",
+            "mode": "managed",
+            "type": "aws_iam_instance_profile",
+            "name": "ray_worker_profile",
+            "values": {
+                "name": "ray_worker_profile",
+                "role": "ray_worker_role"
+            }
+        },
+        {
+          "address": "aws_iam_policy.s3_access",
+          "mode": "managed",
+          "type": "aws_iam_policy",
+          "name": "s3_access",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 0,
+          "values": {
+            "name": "s3-access",
+            "policy": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Action\":\"s3:*\",\"Resource\":\"*\"}]}"
+          }
+        },
+        {
+          "address": "aws_iam_role_policy_attachment.attach",
+          "mode": "managed",
+          "type": "aws_iam_role_policy_attachment",
+          "name": "attach",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 0,
+          "values": {
+            "role": "ray-worker-role",
+            "policy_arn": "aws_iam_policy.s3_access"
+          }
+        },
+        {
+          "address": "aws_s3_bucket.training_data",
+          "mode": "managed",
+          "type": "aws_s3_bucket",
+          "name": "training_data",
+          "provider_name": "registry.terraform.io/hashicorp/aws",
+          "schema_version": 0,
+          "values": {
+            "bucket": "ai-training-data-sensitive",
+            "acl": "private"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -22,7 +22,7 @@ class FixEngine:
         self.targets = targets
         self.internet_node = "Internet"
 
-    def calculate_fix_order(self) -> List[Remediation]:
+    def calculate_fix_order(self, limit: int = None) -> List[Remediation]:
         """
         Returns a prioritized list of fixes.
         Ref: Set Cover Problem (Greedy Approx).
@@ -32,6 +32,9 @@ class FixEngine:
         remediations = []
         
         while True:
+            if limit and len(remediations) >= limit:
+                break
+
             # 1. Find ALL current paths from Internet to ANY Target
             all_paths = self._find_all_paths(current_graph)
             
@@ -64,6 +67,10 @@ class FixEngine:
             # 4. Create Remediation Object
             u, v = best_edge
             edge_data = current_graph.get_edge_data(u, v)
+            if not edge_data:
+                 # Should not happen in theory if edge comes from graph
+                 edge_data = {}
+                 
             risk_type = edge_data.get("risk", "Unknown Risk")
             method = edge_data.get("method", "Unknown Method")
             
