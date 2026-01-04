@@ -1,11 +1,13 @@
 import networkx as nx
-from typing import List, Optional
+import logging
+import json
+from typing import List, Optional, Set, Dict, Any
 from .models import Resource, AttackNode, AttackPath, RuleResult
 
 class AttackEngine:
     """
-    The Core Brain.
-    Models attacker movement from Internet -> Compromise -> Data Exfiltration.
+    Advanced Attack Graph Engine.
+    Models attacker movement based on REALISTIC capabilities and permissions.
     """
     def __init__(self, resource_graph: nx.DiGraph, rule_results: List[RuleResult]):
         self.graph = resource_graph
@@ -14,108 +16,249 @@ class AttackEngine:
         self._build_attack_overlay()
 
     def _build_attack_overlay(self):
-        """Constructs an attack graph by augmenting the resource graph with vulnerability edges."""
-        
-        # 1. Add Attacker Start Node
+        """Constructs the high-fidelity attack graph."""
         self.attack_graph.add_node("Internet", type="External", data={})
 
-        # 2. Map vulnerabilities to edges
-        # Find Public EC2s
-        for res_id, res_data in self.graph.nodes(data=True):
-            resource = res_data.get('resource')
-            if not resource: continue
+        # --- Phase 1: Ingress (Network Reachability) ---
+        for node, data in self.graph.nodes(data=True):
+            res = data.get('resource')
+            if not res: continue
 
-            # VULN: Public SG -> Internet Access
-            # We look for the rule result associated with this resource
-            vulns = [r for r in self.rules if r.resource_id == res_id and not r.is_compliant]
+            if res.type == "aws_instance":
+                if self._is_instance_publicly_exposed(res):
+                    self.attack_graph.add_edge("Internet", node, 
+                                               method="Network Reachability", 
+                                               risk="Exploit Public Service (SSRF/RCE)")
             
-            for v in vulns:
-                if v.rule_id == "NET-001": # Public SG
-                    # If this SG protects an EC2, Attacker can reach EC2
-                    # Find EC2s protected by this SG
-                    for src, dest, attr in self.graph.in_edges(res_id, data=True):
-                        # The edge is EC2 -> SG (protected_by)
-                        # So Dest is SG. Src is EC2.
-                        # Wait, edge direction in resource graph:
-                        # EC2 -> SG means EC2 uses SG.
-                        if attr.get("relationship") == "protected_by":
-                             self.attack_graph.add_edge("Internet", src, method="Public Network Access", risk="Exploit SSH/App Vuln")
+            if res.type == "aws_s3_bucket":
+                if self._is_bucket_public(res):
+                    self.attack_graph.add_edge("Internet", node,
+                                               method="Public ACL/Policy",
+                                               risk="Data Leakage")
+            
+            if res.is_vector_store:
+                if self._is_vector_store_exposed(res):
+                     self.attack_graph.add_edge("Internet", node,
+                                               method="Public Endpoint",
+                                               risk="Knowledge Base Theft")
 
-        # 3. Lateral Movement (EC2 -> Role)
+        # --- Phase 2: Identity Assumption (Compute -> Identity) ---
         for u, v, attr in self.graph.edges(data=True):
             if attr.get("relationship") == "assumes_role":
-                # If attacker Compromises EC2 (u), they get Role (v)
-                self.attack_graph.add_edge(u, v, method="Instance Profile Abuse", risk="Credential Theft")
+                self.attack_graph.add_edge(u, v, 
+                                           method="IMDS/Credential Access", 
+                                           risk="Lateral Movement")
+            
+            if attr.get("relationship") == "uses_identity":
+                self.attack_graph.add_edge(u, v, 
+                                           method="Prompt Injection / Tool Abuse", 
+                                           risk="Indirect Privilege Escalation")
+                                           
+            if attr.get("relationship") == "linked_role":
+                self.attack_graph.add_edge(u, v,
+                                           method="Identity Link",
+                                           risk="Lateral Movement")
 
-        # 4. Permission Abuse (Role -> Resources)
-        # Find overly permissive policies attached to roles
-        for u, v, attr in self.graph.edges(data=True):
-            # u = Role, v = Policy
-            if attr.get("relationship") == "has_policy":
-                # Check if policy is permissive
-                vulns = [r for r in self.rules if r.resource_id == v and r.rule_id == "IAM-001"]
-                if vulns:
-                    # Role has Admin/Star access. 
-                    # Conceptually, this allows access to ALMOST ANY resource.
-                    # We map this to specific high-value targets in the graph for the path finding to work.
-                    
-                    # Target: AI Services
-                    ai_nodes = [n for n, d in self.graph.nodes(data=True) if d.get('resource').is_ai_service]
-                    for ai in ai_nodes:
-                        self.attack_graph.add_edge(u, ai, method="Over-permissive Policy", risk="Invoke Model")
-                    
-                    # Target: S3 Buckets
-                    s3_nodes = [n for n, d in self.graph.nodes(data=True) if d.get('resource').type == "aws_s3_bucket"]
-                    for s3 in s3_nodes:
-                        self.attack_graph.add_edge(u, s3, method="Over-permissive Policy", risk="Data Access")
+        # --- Phase 3: Permission-Based Access (Identity -> Resource) ---
+        roles = [n for n, d in self.graph.nodes(data=True) if d.get('resource') and d.get('resource').type == "aws_iam_role"]
+        
+        for role_id in roles:
+            policies = self._get_attached_policies(role_id)
+            for target_id, target_data in self.graph.nodes(data=True):
+                target_res = target_data.get('resource')
+                if not target_res: continue
+                if target_id == role_id: continue
 
-        # 5. AI Service -> Logs (Data Ref)
+                capability = self._check_permission(policies, target_res)
+                if capability:
+                    self.attack_graph.add_edge(role_id, target_id, 
+                                               method="IAM Permission allow", 
+                                               risk=capability)
+
+        # --- Phase 4: Data Flow / Indirect Access ---
         for u, v, attr in self.graph.edges(data=True):
             if attr.get("relationship") == "logs_to":
-                # u = AI Config, v = S3 Bucket
-                # Accessing AI config implies ability to read/poison logs if permissions allow, 
-                # but physically the data flows to S3.
-                # If attacker controls AI, they generate prompts. Prompts go to S3.
-                # If attacker controls S3, they read prompts.
-                
-                # Path: AI Service -> S3 (Data Flow)
-                self.attack_graph.add_edge(u, v, method="Logging Configuration", risk="Prompt Injection / Leakage")
+                self.attack_graph.add_edge(u, v, 
+                                           method="Data Flow", 
+                                           risk="Log Poisoning / Indirect Write")
 
-        # 6. S3 -> Exfiltration (If public)
-        for res_id, res_data in self.graph.nodes(data=True):
-            resource = res_data.get('resource')
-            if resource and resource.type == "aws_s3_bucket":
-                vulns = [r for r in self.rules if r.resource_id == res_id and r.rule_id == "STO-001"]
-                if vulns:
-                    # Bucket is public.
-                    # If we are AT the bucket node, we can exfiltrate.
-                    # OR if we are at Internet, we can read directly.
-                    
-                    # In this graph, "Internet" is the start. 
-                    # If we reach S3 from internal path, and it's public, that's just leaking.
-                    # But the "Goal" is to find a path TO the data.
+    def _is_instance_publicly_exposed(self, res: Resource) -> bool:
+        if res.id in self.graph:
+            # 1. Check Subnet Context (If available)
+            # If located_in a subnet, check if that subnet is explicitly private
+            for successor in self.graph.successors(res.id):
+                edge_data = self.graph.get_edge_data(res.id, successor)
+                if edge_data and edge_data.get("relationship") == "located_in":
+                    subnet_res = self.graph.nodes[successor].get('resource')
+                    if subnet_res:
+                        # Heuristic: If map_public_ip_on_launch is explicitly False, assume Private
+                        # This is not perfect (could have EIP), but reduces False Positives for internal workloads.
+                        pub_ip = subnet_res.attributes.get("map_public_ip_on_launch", True)
+                        if str(pub_ip).lower() == "false":
+                            return False # Hides behind private subnet
+
+            # 2. Check Security Groups
+            for successor in self.graph.successors(res.id):
+                edge_data = self.graph.get_edge_data(res.id, successor)
+                if not edge_data: continue 
+                if edge_data.get("relationship") == "protected_by":
+                    sg_node = self.graph.nodes[successor].get('resource')
+                    if sg_node and self._is_sg_public(sg_node):
+                        return True
+        return False
+
+    def _is_sg_public(self, res: Resource) -> bool:
+        ingresses = res.attributes.get("ingress", [])
+        if not isinstance(ingresses, list): ingresses = [ingresses]
+        
+        for rule in ingresses:
+            if isinstance(rule, list):
+                for sub in rule:
+                    if isinstance(sub, dict):
+                         if self._check_cidrs(sub.get("cidr_blocks", [])): return True
+            elif isinstance(rule, dict):
+                if self._check_cidrs(rule.get("cidr_blocks", [])): return True
+        return False
+        
+    def _check_cidrs(self, cidrs) -> bool:
+        if not cidrs: return False
+        if isinstance(cidrs, list):
+            for c in cidrs:
+                if isinstance(c, list):
+                    if "0.0.0.0/0" in c: return True
+                elif c == "0.0.0.0/0": return True
+        return False
+
+    def _is_bucket_public(self, res: Resource) -> bool:
+        acl = res.attributes.get("acl", "")
+        if isinstance(acl, list) and len(acl) > 0:
+            acl = acl[0]
+        return acl in ["public-read", "public-read-write"]
+
+    def _is_vector_store_exposed(self, res: Resource) -> bool:
+        return True 
+
+    def _get_attached_policies(self, role_id: str) -> List[Any]:
+        policies = []
+        if role_id in self.graph:
+            for successor in self.graph.successors(role_id):
+                edge_data = self.graph.get_edge_data(role_id, successor)
+                if not edge_data: continue
+                if edge_data.get("relationship") == "has_policy":
+                    policy_res = self.graph.nodes[successor].get('resource')
+                    if policy_res:
+                        raw_policy = policy_res.attributes.get("policy")
+                        if raw_policy:
+                            policies.append(raw_policy)
+        return policies
+
+    def _check_permission(self, policies: List[Any], target: Resource) -> Optional[str]:
+        target_service = target.type.split("_")[1] 
+        
+        for pol in policies:
+            # 1. Normalize Policy to Dict
+            policy_doc = self._normalize_policy(pol)
+            if not policy_doc: continue
+            
+            statements = policy_doc.get("Statement", [])
+            if isinstance(statements, dict): statements = [statements]
+            
+            for stmt in statements:
+                if not isinstance(stmt, dict): continue
+                
+                effect = stmt.get("Effect", "Allow")
+                if effect != "Allow": continue 
+                
+                # Check NotAction Risk
+                if "NotAction" in stmt:
+                    # simplified check for wildcard NotAction
+                    not_actions = self._to_list(stmt.get("NotAction"))
+                    # If target service is excluded, skipped.
+                    # e.g. NotAction: "iam:*", and target is IAM -> Skip.
                     pass
 
-    def find_critical_path(self) -> Optional[AttackPath]:
-        """Finds the Shortest Path to sensitive data (S3 with AI logs)."""
+                actions = self._to_list(stmt.get("Action"))
+                resources = self._to_list(stmt.get("Resource"))
+                
+                # Check Admin
+                if "*" in actions and "*" in resources:
+                    return "Full Admin Access"
+
+                # Check Service Wildcard
+                for act in actions:
+                    if act == f"{target_service}:*" and "*" in resources:
+                        return f"Full {target_service.upper()} Access"
+
+                # Check Specific S3
+                if target.type == "aws_s3_bucket":
+                    if self._check_action_match(actions, ["s3:GetObject", "s3:PutObject", "s3:*"]):
+                       if "*" in resources or target.name in str(resources): # lenient resource check
+                           return "S3 Data Access"
+
+                # Check AI
+                if target.is_ai_service:
+                    if self._check_action_match(actions, ["bedrock:InvokeAgent"]):
+                        return "Agent Invocation"
+                    if self._check_action_match(actions, ["bedrock:InvokeModel", "sagemaker:InvokeEndpoint"]):
+                        return "Model Invocation"
+        return None
+
+    def _normalize_policy(self, pol_ref: Any) -> dict:
+        """Converts string/hcl-dict policy to standard Python dict."""
+        if isinstance(pol_ref, dict):
+            return pol_ref
         
-        # Identify Targets: S3 buckets that store AI logs
+        if isinstance(pol_ref, str):
+            try:
+                # cleanse heredoc markers if any
+                clean = pol_ref.strip()
+                if clean.startswith("<<EOF"): 
+                     clean = clean.split("EOF")[0].replace("<<EOF", "")
+                elif clean.startswith("<<-EOF"):
+                     clean = clean.split("EOF")[0].replace("<<-EOF", "")
+                return json.loads(clean)
+            except json.JSONDecodeError:
+                return {}
+        return {}
+
+    def _to_list(self, val: Any) -> list:
+        if isinstance(val, list): return val
+        if isinstance(val, str): return [val]
+        return []
+
+    def _check_action_match(self, actions: list, targets: list) -> bool:
+        for act in actions:
+            if act in targets: return True
+            # handle wildcards e.g. s3:* matching s3:GetObject
+            if act.endswith("*"):
+                prefix = act.rstrip("*")
+                for t in targets:
+                    if t.startswith(prefix): return True
+        return False
+
+    def find_critical_path(self) -> Optional[AttackPath]:
         targets = []
         for u, v, attr in self.graph.edges(data=True):
             if attr.get("relationship") == "logs_to":
-                targets.append(v) # v is the S3 bucket
+                targets.append(v)
+        
+        for node, data in self.graph.nodes(data=True):
+            res = data.get('resource')
+            if res and res.type == "aws_s3_bucket":
+                 if node not in targets: targets.append(node)
 
         if not targets:
             return None
 
-        # BFS for shortest path (simplest valid attack chain)
         shortest_path = None
         
         for target in targets:
             try:
+                if target not in self.attack_graph:
+                    continue
+
                 path_ids = nx.shortest_path(self.attack_graph, source="Internet", target=target)
                 
-                # Convert IDs to AttackNodes
                 nodes = []
                 for pid in path_ids:
                     node_data = self.graph.nodes[pid] if pid in self.graph.nodes else {"type": "External"}
@@ -123,12 +266,9 @@ class AttackEngine:
                     node_type = res.type if res else "External"
                     nodes.append(AttackNode(id=pid, type=node_type))
                 
-                # Calculate simple score
-                score = len(nodes) * 10 # heuristic
-                
                 path = AttackPath(
                     steps=nodes, 
-                    risk_score=score, 
+                    risk_score=len(nodes) * 20, 
                     severity="Critical", 
                 )
                 
@@ -136,6 +276,8 @@ class AttackEngine:
                     shortest_path = path
 
             except nx.NetworkXNoPath:
+                continue
+            except nx.NodeNotFound:
                 continue
                 
         return shortest_path

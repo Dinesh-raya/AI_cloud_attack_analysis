@@ -11,7 +11,15 @@ class Resource:
     
     @property
     def is_ai_service(self) -> bool:
-        return self.type in ["aws_sagemaker_endpoint", "aws_bedrock_model_invocation_logging_configuration"]
+        return self.type in ["aws_sagemaker_endpoint", "aws_bedrock_model_invocation_logging_configuration", "aws_bedrock_agent"]
+
+    @property
+    def is_agent(self) -> bool:
+        return self.type == "aws_bedrock_agent"
+
+    @property
+    def is_vector_store(self) -> bool:
+        return "opensearch" in self.type or "vector" in self.type
 
     @property
     def is_internet_exposed(self) -> bool:

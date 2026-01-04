@@ -8,7 +8,7 @@ class Reporter:
     """Handles output formatting."""
 
     @staticmethod
-    def print_report(path: AttackPath):
+    def print_report(path: AttackPath, remediations: list = None):
         if not path:
             print(Fore.GREEN + "\n[+] No critical attack paths found.")
             return
@@ -29,11 +29,21 @@ class Reporter:
         print("They locate a public-facing instance or service.")
         print("Through lateral movement (role assumption or permissions), they pivot.")
         print(f"Finally, they reach {Fore.RED}{path.steps[-1].id}{Fore.WHITE}, containing sensitive AI artifacts.")
-        print("-" * 60)
-        print(Fore.GREEN + "RECOMMENDED FIXES:")
-        print("1. Restrict Security Group ingress (Remove 0.0.0.0/0).")
-        print("2. Enforce Least Privilege on IAM Roles (Remove '*').")
-        print("3. Encrypt AI Model Logs and block public S3 access.")
+        
+        if remediations:
+            print("-" * 60)
+            print(Fore.GREEN + f"🛑 MINIMUM REMEDIATION PLAN ({len(remediations)} steps to stop ALL paths)")
+            print(Fore.WHITE + "Fixing these items in order will break the most attack chains first.")
+            print("-" * 60)
+            for i, fix in enumerate(remediations):
+                print(f"{i+1}. {Fore.YELLOW}{fix.description}{Style.RESET_ALL}")
+                print(f"   Impact: Blocks {fix.paths_blocked} attack path(s). Risk: {fix.risk_type}")
+        else:
+            print("-" * 60)
+            print(Fore.GREEN + "RECOMMENDED FIXES:")
+            print("1. Restrict Security Group ingress (Remove 0.0.0.0/0).")
+            print("2. Enforce Least Privilege on IAM Roles (Remove '*').")
+            print("3. Encrypt AI Model Logs and block public S3 access.")
 
     @staticmethod
     def to_json(path: AttackPath) -> str:

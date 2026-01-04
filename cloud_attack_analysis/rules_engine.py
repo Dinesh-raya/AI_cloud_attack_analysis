@@ -26,10 +26,18 @@ class RulesEngine:
         if not isinstance(ingresses, list): ingresses = [ingresses]
         
         for rule in ingresses:
-            cidr_blocks = rule.get("cidr_blocks", [])
+            # Defensive coding for HCL parser lists
+            cidrs = []
+            if isinstance(rule, list):
+                for sub in rule:
+                    if isinstance(sub, dict):
+                         cidrs.extend(sub.get("cidr_blocks", []))
+            elif isinstance(rule, dict):
+                cidrs = rule.get("cidr_blocks", [])
+
             # Handle list of strings
-            if isinstance(cidr_blocks, list):
-                if "0.0.0.0/0" in cidr_blocks:
+            if isinstance(cidrs, list):
+                if "0.0.0.0/0" in cidrs:
                     results.append(RuleResult(
                         rule_id="NET-001",
                         resource_id=res.id,
@@ -45,6 +53,8 @@ class RulesEngine:
         # Simplified check: looks for acl="public-read" or similar
         # Real world would check block_public_access resources too
         acl = res.attributes.get("acl", "")
+        if isinstance(acl, list) and len(acl) > 0: acl = acl[0]
+        
         if acl == "public-read" or acl == "public-read-write":
              return [RuleResult(
                 rule_id="STO-001",
@@ -60,10 +70,13 @@ class RulesEngine:
     def _check_iam_permissive(res: Resource) -> List[RuleResult]:
         # Check for Effect: Allow, Resource: *
         doc = res.attributes.get("policy", "")
-        # In a real parser, 'policy' is a JSON string or Heredoc. 
-        # We'll do a simple string check for demonstration as full JSON parsing of escaped strings is complex.
-        if '"Effect": "Allow"' in doc or '"Effect": "Allow"' in str(doc): # Formatting varies
-             if '"Resource": "*"' in doc or '"Action": "*"' in doc:
+        if isinstance(doc, list) and len(doc) > 0:
+            doc = doc[0] # HCL quirk
+
+        doc_str = str(doc)
+        
+        if '"Effect": "Allow"' in doc_str: # Formatting varies
+             if '"Resource": "*"' in doc_str or '"Action": "*"' in doc_str:
                   return [RuleResult(
                     rule_id="IAM-001",
                     resource_id=res.id,
@@ -79,6 +92,9 @@ class RulesEngine:
         # Check if AI logs are sent to S3 (potential leak of prompt data)
         # This is a structural check that informs the risk
         logging_config = res.attributes.get("logging_config", {})
+        if isinstance(logging_config, list) and len(logging_config) > 0:
+            logging_config = logging_config[0]
+            
         if "s3_config" in logging_config:
              return [RuleResult(
                 rule_id="AI-001",

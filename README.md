@@ -100,3 +100,26 @@ AI logs often contain:
 - API keys (accidentally pasted)
 
 This tool treats these logs as "Critical Data" nodes in the graph, ensuring they are prioritized in risk analysis.
+
+## Project Philosophy
+1.  **Deterministic over Probabilistic**: We do not use LLMs to *guess* if something is secure. We use graph theory and rigid policy evaluation. Security tools must be predictable.
+2.  **Infrastructure is Code**: We analyze the *intent* (HCL), not just the live state. This allows for Shift-Left security.
+3.  **Restraint**: We focus *only* on the critical path to data. We do flag every minor best-practice violation (e.g., missing tags). Signal > Noise.
+
+## What This Tool Intentionally Does NOT Do
+*   **Runtime Detection**: We are not an EDR. We do not monitor running processes or network packets.
+*   **Multi-Cloud Sprawl**: We currently focus strictly on AWS. Quality over quantity.
+*   **"Magic" Remediation**: We suggest fixes, but we will never auto-apply changes to your code. Humans must remain in the loop.
+
+## Roadmap
+*   **v1.0 (Current)**: 
+    *   Core Graph Engine (NetworkX).
+    *   Basic AWS Resource Support (EC2, S3, IAM, Bedrock, SageMaker).
+    *   Pathfinding Algorithm targeting "logs_to" relationships.
+*   **v2.0 (Planned)**: 
+    *   Expanded IAM parsing (Condition keys, `NotAction`).
+    *   Support for vector databases (Pinecone, Weaviate) if declared in Terraform.
+    *   CI/CD Integration (GitHub Actions output).
+*   **v3.0 (Long Term)**: 
+    *   Live State Ingestion (boto3) to augment static analysis.
+    *   Visual Graph Export (GraphViz/Mermaid).
