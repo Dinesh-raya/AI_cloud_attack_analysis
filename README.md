@@ -2,7 +2,7 @@
 
 **A Production-Quality Offline Security Engine for AI-Cloud Infrastructure**
 
-[![Security Scan](https://github.com/your-repo/actions/workflows/security_scan.yml/badge.svg)](https://github.com/your-repo/actions)
+[![Security Scan](https://github.com/Dinesh-raya/AI_cloud_attack_analysis/actions/workflows/security_scan.yml.svg)](https://github.com/Dinesh-raya/AI_cloud_attack_analysis/actions)
 
 ## 🎯 The Core Question This Tool Answers
 
