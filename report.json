@@ -1,0 +1,18 @@
+{
+  "priority_fixes": [
+    {
+      "rank": 1,
+      "resource": "aws_security_group: debug_sg",
+      "risk_score": 10,
+      "breaks_attack_paths": 0,
+      "attack_stages_blocked": [
+        "Initial Access"
+      ],
+      "why_this_matters": "Fixing this security_group removes the attacker's entry point into the environment.",
+      "recommended_fix": "Restrict ingress rules to specific IPs. Remove 0.0.0.0/0 CIDR blocks. Use VPC endpoints for internal traffic."
+    }
+  ],
+  "status": "VULNERABLE",
+  "total_attack_paths": 0,
+  "critical_path": []
+}

@@ -281,3 +281,46 @@ class AttackEngine:
                 continue
                 
         return shortest_path
+
+    def find_all_paths(self, max_depth: int = 10) -> List[List[str]]:
+        """
+        Find all attack paths from Internet to sensitive targets.
+        Returns a list of paths, where each path is a list of node IDs.
+        """
+        all_paths = []
+        
+        # Identify targets (S3 buckets, AI services, sensitive data)
+        targets = set()
+        for node, data in self.graph.nodes(data=True):
+            res = data.get('resource')
+            if res:
+                if res.type in ["aws_s3_bucket", "aws_opensearch_domain", 
+                               "aws_sagemaker_notebook_instance", "aws_dynamodb_table"]:
+                    targets.add(node)
+                if res.is_vector_store:
+                    targets.add(node)
+        
+        # Also add log destinations
+        for u, v, attr in self.graph.edges(data=True):
+            if attr.get("relationship") == "logs_to":
+                targets.add(v)
+
+        # Find all simple paths from Internet to each target
+        for target in targets:
+            if target not in self.attack_graph:
+                continue
+            if "Internet" not in self.attack_graph:
+                continue
+            try:
+                paths = nx.all_simple_paths(
+                    self.attack_graph, 
+                    source="Internet", 
+                    target=target,
+                    cutoff=max_depth
+                )
+                for path in paths:
+                    all_paths.append(list(path))
+            except nx.NetworkXError:
+                continue
+
+        return all_paths

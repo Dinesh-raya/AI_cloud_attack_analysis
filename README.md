@@ -1,14 +1,49 @@
-# Cloud Attack Analysis – AI-Aware Edition
+# Cloud Attack Analysis – Security Decision Engine
 
 **A Production-Quality Offline Security Engine for AI-Cloud Infrastructure**
 
-## Problem Statement
-In the era of AI, cloud infrastructure is no longer just EC2 and S3. It now includes Vector Stores, LLM Endpoints (SageMaker, Bedrock), and massive datasets of prompt history. Traditional security tools often overlook the unique risks posed by these AI services.
+[![Security Scan](https://github.com/your-repo/actions/workflows/security_scan.yml/badge.svg)](https://github.com/your-repo/actions)
 
-Calculated Risk = `Exposure` × `Privilege` × `AI Data Sensitivity`
+## 🎯 The Core Question This Tool Answers
 
-This tool allows security engineers to **model attack paths deterministically** from Terraform code, answering the question:
-> "Can an attacker starting from the Internet reach my sensitive AI prompt logs?"
+> "If I can fix ONLY ONE issue today, which fix reduces the MOST real-world risk?"
+
+This is not a vulnerability scanner. This is a **Security Decision Engine** that thinks like an attacker.
+
+---
+
+## 🌐 Why This Tool Matters in the AI Era
+
+### The Landscape Has Changed
+
+Traditional cloud infrastructure (EC2, S3, IAM) has been augmented with new **AI-native services**:
+- **SageMaker Notebooks**: Where researchers experiment with your data
+- **Bedrock Agents**: AI assistants that can call tools on your behalf
+- **Vector Databases**: Containing your company's entire knowledge base
+- **Training Data Buckets**: The crown jewels of any AI company
+
+### The Problem with Existing Tools
+
+| Tool Category | What They Do | What They Miss |
+|--------------|--------------|----------------|
+| **Scanners** (Prowler, ScoutSuite) | Check individual rules | Don't connect the dots |
+| **CSPM** (Wiz, Orca) | Detect misconfigurations | Don't prioritize by attack impact |
+| **SIEM** (Splunk, Elastic) | Monitor runtime events | Too late—the breach happened |
+
+### What Makes This Tool Different
+
+1. **Graph-Based Reasoning**: We build a map of your infrastructure, then simulate attacker movement
+2. **Attack Stage Classification**: Every finding is tagged with its role in the kill chain
+3. **Impact-Based Prioritization**: Fixes are ranked by how many attack paths they break
+4. **AI-Aware Targeting**: AI/ML resources are treated as high-value targets by default
+
+### The New Reality
+
+```
+Identity is the new perimeter.
+AI services massively expand blast radius.
+Static misconfigurations enable model & data theft.
+```
 
 ---
 
@@ -37,76 +72,119 @@ This tool acts like a **Master Thief**. It doesn't look at a checklist; it draws
 
 ---
 
-## Features
-- **Offline & Private**: No cloud credentials required. Runs entirely on your local machine.
-- **AI-Aware**: Specifically models Bedrock and SageMaker as high-value targets.
-- **Graph-Based Engine**: Uses NetworkX to build a directed graph of resources and trust relationships.
-- **Deterministic**: No "hallucinating" AI guesses. Logic is based on rigid security rules.
-
-## Architecture
-
-1. **Parser**: Reading Terraform (HCL) maps them to normalized Resource objects.
-2. **Graph Builder**: Connects resources (EC2 -> SG, Role -> Policy, AI -> S3).
-3. **Rules Engine**: Flags misconfigurations (e.g., `0.0.0.0/0`, `Effect: Allow *`).
-4. **Attack Engine**: Simulates an attacker traversing the graph (BFS) to find the "Crown Jewels".
-5. **Reporter**: specific fix recommendations.
-
-### Attack Path Diagram (ASCII)
-
-```
-[ Internet ] 
-     | (Public SG vulnerability)
-     v
-[ EC2 Instance ]
-     | (Instance Profile / Assumes Role)
-     v
-[ IAM Role (Admin/*) ]
-     | (Over-permissive Policy)
-     v
-[ Bedrock Logging Config ]
-     | (Logs_to relationship)
-     v
-[ S3 Bucket (Prompt Logs) ] ---> EXFILTRATION (Critical Risk)
-```
-
-## Installation
-
-Requires Python 3.10+
+## 🚀 Quick Start
 
 ```bash
+# Clone and install
+git clone https://github.com/your-repo/cloud-attack-analysis.git
+cd cloud-attack-analysis
 pip install -r requirements.txt
-python setup.py install
+
+# Run the demo
+python main.py --input demo/terraform --output report.json
+
+# View interactive attack graph
+python main.py --input demo/terraform --visualize
 ```
-
-## Usage
-
-**Scanning a Terraform Directory**
-
-```bash
-python -m cloud_attack_analysis.cli scan ./examples/vulnerable_infra --visualize
-```
-
-## 📁 The Grand Catalog of AI-Cloud Attacks
-
-The `examples/scenarios/` directory contains 8 real-world templates for testing the engine:
-
-1.  **`rag_data_leak`**: SSRF on a web server leading to the exfiltration of an internal Vector Database (OpenSearch).
-2.  **`sagemaker_notebook_admin`**: The risk of "Lazy IAM" where an AI researcher's notebook has `AdministratorAccess`.
-3.  **`bedrock_agent_injection`**: Demonstration of Prompt Injection where an agent is tricked into using a Lambda tool to leak S3 data.
-4.  **`training_pipeline_poison`**: An insecure S3 bucket trigger that allows an attacker to inject malicious code into a CodeBuild training job.
-5.  **`model_package_registry_leak`**: A SageMaker Model Registry with a public resource policy, allowing Model IP theft.
-6.  **`unprotected_vector_store`**: A Vector DB directly exposed to the internet via an over-permissive Security Group (Port 9200).
-7.  **`ai_assistant_tool_abuse`**: An AI assistant tool (Lambda) that has broad `dynamodb:*` access, leading to PII leaks.
-8.  **`capital_one_repro`**: A formalized reproduction of the 2019 breach involving IMDSv1 credential theft and S3 Sync.
 
 ---
 
-## Roadmap
-*   **v1.0 (Released)**: 
-    *   Core Graph Engine (NetworkX).
-    *   Visualization (`--visualize`).
-    *   CI/CD Integration.
-    *   Terraform Plan JSON Support.
-*   **v2.0 (Planned)**: 
-    *   Expanded IAM parsing (Condition keys, `NotAction`).
-    *   Support for vector databases (Pinecone, Weaviate) if declared in Terraform.
+## 📊 Output Format
+
+The tool produces a deterministic JSON report:
+
+```json
+{
+  "status": "VULNERABLE",
+  "total_attack_paths": 4,
+  "priority_fixes": [
+    {
+      "rank": 1,
+      "resource": "aws_iam_role: SageMakerExecutionRole",
+      "risk_score": 27,
+      "breaks_attack_paths": 4,
+      "attack_stages_blocked": [
+        "Initial Access",
+        "Privilege Escalation",
+        "AI Training Data Exfiltration"
+      ],
+      "why_this_matters": "Fixing this role removes attacker access to LLM training data and prevents lateral movement into S3 and Bedrock.",
+      "recommended_fix": "Restrict iam:PassRole, remove wildcard permissions, and scope policies to minimum required actions."
+    }
+  ]
+}
+```
+
+---
+
+## 🧮 Risk Scoring Formula
+
+Every fix is scored using this **deterministic, explainable formula**:
+
+```
+Risk Score =
+  (AttackPathCount × 3)
++ (IsEntryPoint × 5)
++ (PrivilegeEscalation × 4)
++ (AIDataExposure × 6)
++ (InternetExposed × 5)
+```
+
+| Factor | Weight | Why |
+|--------|--------|-----|
+| Attack Path Count | ×3 | More paths = greater blast radius |
+| Entry Point | +5 | First hop in any attack chain |
+| Privilege Escalation | +4 | Enables lateral movement |
+| AI Data Exposure | +6 | Crown jewels of AI companies |
+| Internet Exposed | +5 | Attackable without credentials |
+
+---
+
+## 📁 Scenario Library
+
+The `examples/scenarios/` directory contains 8 real-world attack patterns:
+
+1. **`rag_data_leak`**: SSRF to Vector Database
+2. **`sagemaker_notebook_admin`**: Lazy IAM leading to account takeover
+3. **`bedrock_agent_injection`**: Prompt injection via AI tools
+4. **`training_pipeline_poison`**: S3-triggered code injection
+5. **`model_package_registry_leak`**: SageMaker model theft
+6. **`unprotected_vector_store`**: Direct OpenSearch exposure
+7. **`ai_tool_abuse`**: PII leak through AI assistant tools
+8. **`capital_one_repro`**: Classic IMDSv1 SSRF attack
+
+---
+
+## 📚 Documentation
+
+- [USAGE_GUIDE.md](USAGE_GUIDE.md) - Step-by-step usage instructions
+- [LIMITATIONS.md](LIMITATIONS.md) - What this tool does NOT do
+- [PERFORMANCE.md](PERFORMANCE.md) - Complexity analysis and benchmarks
+
+---
+
+## 🛡️ Design Constraints
+
+This tool is intentionally constrained:
+
+- ✅ CLI only (no dashboards)
+- ✅ Deterministic output (no ML models)
+- ✅ Fully explainable logic (no black boxes)
+- ✅ Offline operation (no cloud credentials)
+- ✅ Privacy-first (no data exfiltration)
+
+---
+
+## 🎓 Definition of Done
+
+The project is DONE when:
+- ✅ One command produces ranked fix decisions
+- ✅ Each fix clearly explains WHY it matters
+- ✅ Every scoring decision can be defended in an interview
+- ✅ The tool behaves like a security engineer, not a scanner
+
+---
+
+## 📝 License
+
+MIT License - Use freely, contribute boldly.

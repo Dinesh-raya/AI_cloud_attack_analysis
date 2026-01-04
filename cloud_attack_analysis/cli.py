@@ -10,19 +10,27 @@ from .reporter import Reporter
 from .visualizer import Visualizer
 import os
 
-def scan(directory, visualize=False):
-    print(f"[*] Scanning target: {directory}...")
+def scan(target, visualize=False):
+    print(f"[*] Scanning target: {target}...")
     
     resources = []
     
     # Check if input is a JSON Plan file
-    if os.path.isfile(directory) and directory.endswith(".json"):
+    if os.path.isfile(target) and target.endswith(".json"):
         print(f"[*] Detected Terraform Plan JSON.")
         parser = PlanParser()
-        resources = parser.parse(directory)
+        resources = parser.parse(target)
+    elif os.path.isfile(target) and target.endswith(".tf"):
+        print(f"[*] Detected single Terraform file.")
+        # Point parser to the parent directory to allow cross-resource resolution
+        # but the parser will pick up everything in that dir.
+        parser = TerraformParser(os.path.dirname(target))
+        resources = parser.parse()
+        # Optionally filter: resources = [r for r in resources if r.file == target] 
+        # but our model doesn't store source file yet.
     else:
-        # Fallback to standard HCL Directory Scan
-        parser = TerraformParser(directory)
+        # Standard HCL Directory Scan
+        parser = TerraformParser(target)
         resources = parser.parse()
 
     print(f"[*] Parsed {len(resources)} resources.")
@@ -60,7 +68,7 @@ def main():
 
     # Scan command
     scan_parser = subparsers.add_parser("scan", help="Scan a directory or plan file")
-    scan_parser.add_argument("target", help="Target directory or .json file")
+    scan_parser.add_argument("target", help="Target directory or .json / .tf file")
     scan_parser.add_argument("--visualize", action="store_true", help="Generate HTML graph visualization")
 
     args = parser.parse_args()
