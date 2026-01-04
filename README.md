@@ -86,57 +86,20 @@ python setup.py install
 python -m cloud_attack_analysis.cli scan ./examples/vulnerable_infra --visualize
 ```
 
-**Example Output**
+## 📁 The Grand Catalog of AI-Cloud Attacks
 
-```
-[*] Scanning directory: ./examples/vulnerable_infra...
-[*] Parsed 6 resources.
-[*] Built resource graph with 6 nodes.
-[*] Detected 3 misconfigurations.
+The `examples/scenarios/` directory contains 8 real-world templates for testing the engine:
 
-[!] CRITICAL ATTACK PATH DETECTED [!]
-Risk Score: 50.0 | Severity: Critical
-------------------------------------------------------------
-1. [External] Internet
-   🔻 exploits trust to reach
-2. [aws_instance] aws_instance.app_server
-   🔻 exploits trust to reach
-3. [aws_iam_role] aws_iam_role.ec2_ai_role
-   🔻 exploits trust to reach
-4. [aws_bedrock_model_invocation_logging_configuration] aws_bedrock_model_invocation_logging_configuration.main
-   🔻 exploits trust to reach
-5. [aws_s3_bucket] aws_s3_bucket.ai_logs
-   🛑 exploits trust to reach
-------------------------------------------------------------
-Narrative:
-The attacker starts at the Internet.
-They locate a public-facing instance or service.
-Through lateral movement (role assumption or permissions), they pivot.
-Finally, they reach aws_s3_bucket.ai_logs, containing sensitive AI artifacts.
-------------------------------------------------------------
-RECOMMENDED FIXES:
-1. Restrict Security Group ingress (Remove 0.0.0.0/0).
-2. Enforce Least Privilege on IAM Roles (Remove '*').
-3. Encrypt AI Model Logs and block public S3 access.
-```
+1.  **`rag_data_leak`**: SSRF on a web server leading to the exfiltration of an internal Vector Database (OpenSearch).
+2.  **`sagemaker_notebook_admin`**: The risk of "Lazy IAM" where an AI researcher's notebook has `AdministratorAccess`.
+3.  **`bedrock_agent_injection`**: Demonstration of Prompt Injection where an agent is tricked into using a Lambda tool to leak S3 data.
+4.  **`training_pipeline_poison`**: An insecure S3 bucket trigger that allows an attacker to inject malicious code into a CodeBuild training job.
+5.  **`model_package_registry_leak`**: A SageMaker Model Registry with a public resource policy, allowing Model IP theft.
+6.  **`unprotected_vector_store`**: A Vector DB directly exposed to the internet via an over-permissive Security Group (Port 9200).
+7.  **`ai_assistant_tool_abuse`**: An AI assistant tool (Lambda) that has broad `dynamodb:*` access, leading to PII leaks.
+8.  **`capital_one_repro`**: A formalized reproduction of the 2019 breach involving IMDSv1 credential theft and S3 Sync.
 
-## Why This Matters
-AI logs often contain:
-- Proprietary algorithms (in prompts)
-- PII/Customer data (in RAG contexts)
-- API keys (accidentally pasted)
-
-This tool treats these logs as "Critical Data" nodes in the graph, ensuring they are prioritized in risk analysis.
-
-## Project Philosophy
-1.  **Deterministic over Probabilistic**: We do not use LLMs to *guess* if something is secure. We use graph theory and rigid policy evaluation. Security tools must be predictable.
-2.  **Infrastructure is Code**: We analyze the *intent* (HCL), not just the live state. This allows for Shift-Left security.
-3.  **Restraint**: We focus *only* on the critical path to data. We do flag every minor best-practice violation (e.g., missing tags). Signal > Noise.
-
-## What This Tool Intentionally Does NOT Do
-*   **Runtime Detection**: We are not an EDR. We do not monitor running processes or network packets.
-*   **Multi-Cloud Sprawl**: We currently focus strictly on AWS. Quality over quantity.
-*   **"Magic" Remediation**: We suggest fixes, but we will never auto-apply changes to your code. Humans must remain in the loop.
+---
 
 ## Roadmap
 *   **v1.0 (Released)**: 
